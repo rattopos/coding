@@ -1,2 +1,2 @@
 # coding
-LaTeX, Python, C/C++
+TeX, Python, C/C++
