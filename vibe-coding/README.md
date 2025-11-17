@@ -24,27 +24,40 @@
 - **Axios**: HTTP 클라이언트
 - **React Dropzone**: 파일 업로드
 
-## 📦 설치 및 실행 방법
+## 🚀 빠른 시작 (자동 실행)
 
-### 1. 저장소 클론
+### macOS/Linux
 
 ```bash
-cd vibe-coding
+# 실행 권한 부여 (처음 한 번만)
+chmod +x start.sh stop.sh
+
+# 앱 시작
+./start.sh
+
+# 앱 종료 (다른 터미널에서)
+./stop.sh
 ```
 
-### 2. Backend 설정
+스크립트가 자동으로:
+1. 필요한 패키지 확인 및 설치
+2. Backend 서버 시작 (포트 5001)
+3. Frontend 서버 시작 (포트 3000)
+4. 브라우저 자동 실행
+
+## 📦 수동 설치 및 실행
+
+### 1. Backend 설정
 
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python app.py
+pip install Flask flask-cors pandas openpyxl xlrd numpy
+python3 app.py
 ```
 
-Backend 서버가 `http://localhost:5000`에서 실행됩니다.
+Backend 서버가 `http://localhost:5001`에서 실행됩니다.
 
-### 3. Frontend 설정
+### 2. Frontend 설정
 
 새 터미널 창을 열고:
 
@@ -56,7 +69,7 @@ npm start
 
 Frontend 개발 서버가 `http://localhost:3000`에서 실행됩니다.
 
-## 🚀 사용 방법
+## 🎯 사용 방법
 
 1. 브라우저에서 `http://localhost:3000` 접속
 2. 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 업로드
@@ -78,6 +91,8 @@ Frontend 개발 서버가 `http://localhost:3000`에서 실행됩니다.
 
 ```
 vibe-coding/
+├── start.sh                # 앱 자동 실행 스크립트
+├── stop.sh                 # 앱 종료 스크립트
 ├── backend/
 │   ├── app.py              # Flask 애플리케이션
 │   └── requirements.txt    # Python 의존성
@@ -122,6 +137,13 @@ vibe-coding/
 ### GET /api/health
 서버 상태를 확인합니다.
 
+**Response:**
+```json
+{
+  "status": "healthy"
+}
+```
+
 ## 💡 예제 데이터
 
 테스트를 위해 다음과 같은 엑셀 파일을 준비하세요:
@@ -130,7 +152,9 @@ vibe-coding/
 |------|--------|----------|--------|
 | 2025-01-01 | 1000000 | 500 | 2.5 |
 | 2025-01-02 | 1200000 | 600 | 3.0 |
-| ... | ... | ... | ... |
+| 2025-01-03 | 950000 | 480 | 2.2 |
+| 2025-01-04 | 1300000 | 650 | 3.2 |
+| 2025-01-05 | 1100000 | 550 | 2.8 |
 
 ## 🎨 UI 특징
 
@@ -144,7 +168,39 @@ vibe-coding/
 
 1. Backend 서버가 먼저 실행되어야 Frontend에서 파일을 업로드할 수 있습니다.
 2. 큰 파일(수만 행 이상)의 경우 처리 시간이 길어질 수 있습니다.
-3. 현재 버전은 로컬 환경에서만 동작합니다. 프로덕션 배포 시 추가 설정이 필요합니다.
+3. macOS에서는 포트 5000이 AirPlay Receiver에 의해 사용되므로 포트 5001을 사용합니다.
+
+## 🐛 문제 해결
+
+### Backend 서버가 시작되지 않는 경우
+
+```bash
+# 패키지 재설치
+cd backend
+pip install --upgrade Flask flask-cors pandas openpyxl xlrd numpy
+
+# 포트 충돌 확인
+lsof -ti:5001
+```
+
+### Frontend가 시작되지 않는 경우
+
+```bash
+# node_modules 재설치
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### 포트가 이미 사용 중인 경우
+
+```bash
+# Backend 포트 해제
+lsof -ti:5001 | xargs kill -9
+
+# Frontend 포트 해제
+lsof -ti:3000 | xargs kill -9
+```
 
 ## 🔮 향후 개선 사항
 
@@ -154,6 +210,7 @@ vibe-coding/
 - [ ] PDF 보고서 다운로드 기능
 - [ ] 여러 파일 비교 분석
 - [ ] 데이터 필터링 및 정렬 기능
+- [ ] 분석 결과 저장 및 이력 관리
 
 ## 📝 라이센스
 
@@ -166,4 +223,3 @@ MIT License
 ---
 
 **문제가 발생하거나 개선 사항이 있다면 이슈를 등록해주세요!**
-
