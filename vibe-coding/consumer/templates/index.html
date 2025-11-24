@@ -15,7 +15,7 @@
 
         <div class="controls">
             <button id="analyzeBtn" class="btn btn-primary">통계 분석 실행</button>
-            <button id="downloadBtn" class="btn btn-secondary" disabled>보도자료 다운로드</button>
+            <button id="downloadBtn" class="btn btn-secondary" disabled>보도자료 보기</button>
         </div>
 
         <div id="loading" class="loading hidden">
@@ -28,6 +28,11 @@
         <div id="statistics" class="statistics hidden">
             <h2>주요 통계량</h2>
             <div class="stats-grid" id="statsGrid"></div>
+        </div>
+
+        <div id="pressRelease" class="press-release-container hidden">
+            <h2>보도자료</h2>
+            <div id="pressReleaseContent"></div>
         </div>
     </div>
 

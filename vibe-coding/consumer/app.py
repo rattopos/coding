@@ -63,17 +63,28 @@ def load_data():
         # JSON 응답 파싱
         data = response.json()
         
-        # 에러 체크
-        if 'err' in data and data['err'] != '0':
-            error_msg = data.get('errMsg', '알 수 없는 오류가 발생했습니다.')
-            raise Exception(f"KOSIS API 오류: {error_msg}")
-        
-        # 데이터가 없는 경우
-        if 'StatisticSearch' not in data or not data['StatisticSearch']:
-            raise Exception("KOSIS API에서 데이터를 가져올 수 없습니다.")
-        
-        # API 응답을 DataFrame으로 변환
-        df = convert_kosis_response_to_dataframe(data)
+        # 응답이 리스트인 경우와 딕셔너리인 경우 모두 처리
+        if isinstance(data, list):
+            # 리스트 형식 응답 (직접 데이터 배열)
+            if len(data) == 0:
+                raise Exception("KOSIS API에서 데이터를 가져올 수 없습니다. (빈 응답)")
+            # 리스트를 그대로 전달
+            df = convert_kosis_response_to_dataframe(data)
+        elif isinstance(data, dict):
+            # 딕셔너리 형식 응답
+            # 에러 체크
+            if 'err' in data and data['err'] != '0':
+                error_msg = data.get('errMsg', '알 수 없는 오류가 발생했습니다.')
+                raise Exception(f"KOSIS API 오류: {error_msg}")
+            
+            # 데이터가 없는 경우
+            if 'StatisticSearch' not in data or not data['StatisticSearch']:
+                raise Exception("KOSIS API에서 데이터를 가져올 수 없습니다.")
+            
+            # API 응답을 DataFrame으로 변환
+            df = convert_kosis_response_to_dataframe(data)
+        else:
+            raise Exception(f"예상하지 못한 응답 형식: {type(data)}")
         
         return df
         
@@ -88,70 +99,68 @@ def convert_kosis_response_to_dataframe(data):
         # 다양한 응답 형식 처리
         rows = []
         
-        # 형식 1: StatisticSearch.row
-        if 'StatisticSearch' in data:
-            search_data = data['StatisticSearch']
-            if isinstance(search_data, list) and len(search_data) > 0:
-                first_item = search_data[0]
-                if 'row' in first_item:
-                    rows = first_item['row']
-            elif isinstance(search_data, dict) and 'row' in search_data:
-                rows = search_data['row']
+        # 형식 1: StatisticSearch.row (딕셔너리 응답)
+        if isinstance(data, dict):
+            if 'StatisticSearch' in data:
+                search_data = data['StatisticSearch']
+                if isinstance(search_data, list) and len(search_data) > 0:
+                    first_item = search_data[0]
+                    if 'row' in first_item:
+                        rows = first_item['row']
+                elif isinstance(search_data, dict) and 'row' in search_data:
+                    rows = search_data['row']
+            
+            # 형식 2: 직접 row 배열
+            if not rows and 'row' in data:
+                rows = data['row']
         
-        # 형식 2: 직접 row 배열
-        if not rows and 'row' in data:
-            rows = data['row']
-        
-        # 형식 3: 최상위 레벨 배열
-        if not rows and isinstance(data, list):
+        # 형식 3: 최상위 레벨 배열 (리스트 응답)
+        if isinstance(data, list):
             rows = data
         
         if not rows:
             # 디버깅: 응답 구조 출력
-            print("API 응답 구조:", list(data.keys()) if isinstance(data, dict) else "리스트 형식")
+            if isinstance(data, dict):
+                print("API 응답 구조:", list(data.keys()))
+            else:
+                print("API 응답 구조: 리스트 형식")
             raise Exception("API 응답에서 행 데이터를 찾을 수 없습니다.")
         
-        # 데이터 변환
-        data_list = []
-        excluded_keys = {'C1', 'C2', 'C1_NM', 'C2_NM', 'ITM_NM', 'ITM_ID', 'ORG_ID', 'TBL_ID', 'PRD_DE', 'PRD_SE'}
+        # 데이터 변환: PRD_DE와 DT 필드를 사용하여 날짜별로 그룹화
+        # 같은 시도별, 지출목적별 그룹의 데이터를 하나의 행으로 합침
+        grouped_data = {}
         
         for row in rows:
             if not isinstance(row, dict):
                 continue
-                
-            row_dict = {}
             
-            # 시도별, 지출목적별 정보 추출
-            row_dict['시도별'] = row.get('C1_NM', row.get('C1', '전국'))
-            row_dict['지출목적별'] = row.get('C2_NM', row.get('C2', ''))
+            # 시도별, 지출목적별로 그룹 키 생성
+            c1_nm = row.get('C1_NM', row.get('C1', '전국'))
+            c2_nm = row.get('C2_NM', row.get('C2', ''))
+            group_key = (c1_nm, c2_nm)
             
-            # 시계열 데이터 추출
-            for key, value in row.items():
-                if key in excluded_keys:
-                    continue
-                
-                # DT_로 시작하는 날짜 필드 처리
-                if key.startswith('DT_'):
-                    date_str = key.replace('DT_', '')
-                    # YYYYMM 형식 변환
-                    if len(date_str) == 6 and date_str.isdigit():
-                        formatted_date = f"{date_str[:4]}.{date_str[4:]}"
-                        row_dict[formatted_date] = value
-                # 숫자로 시작하는 키도 날짜로 간주 (예: 201601)
-                elif key.isdigit() and len(key) == 6:
-                    formatted_date = f"{key[:4]}.{key[4:]}"
-                    row_dict[formatted_date] = value
-                # 이미 YYYY.MM 형식인 경우
-                elif '.' in key and len(key.split('.')) == 2:
-                    row_dict[key] = value
+            # 그룹이 없으면 초기화
+            if group_key not in grouped_data:
+                grouped_data[group_key] = {
+                    '시도별': c1_nm,
+                    '지출목적별': c2_nm,
+                }
             
-            if row_dict:
-                data_list.append(row_dict)
+            # PRD_DE (날짜)와 DT (값) 추출
+            prd_de = row.get('PRD_DE', '')
+            dt_value = row.get('DT', '')
+            
+            if prd_de and dt_value:
+                # PRD_DE 형식: YYYYMM -> YYYY.MM
+                if len(prd_de) == 6 and prd_de.isdigit():
+                    formatted_date = f"{prd_de[:4]}.{prd_de[4:]}"
+                    grouped_data[group_key][formatted_date] = dt_value
         
-        if not data_list:
+        if not grouped_data:
             raise Exception("변환된 데이터가 없습니다.")
         
         # DataFrame 생성
+        data_list = list(grouped_data.values())
         df = pd.DataFrame(data_list)
         
         # 시도별, 지출목적별 컬럼 보장
@@ -600,19 +609,171 @@ def get_statistics():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def generate_press_release_html(stats):
+    """보도자료를 HTML 형식으로 생성"""
+    now = datetime.now()
+    weekday_kr = ['월', '화', '수', '목', '금', '토', '일'][now.weekday()]
+    press_time = f'보도시점 {now.strftime("%Y. %m. %d")}.({weekday_kr}) 08:00'
+    release_time = f'배포{now.strftime("%Y. %m. %d")}.({weekday_kr}) 07:30'
+    
+    html = f"""
+    <div class="press-release">
+        <div class="press-header">
+            <h2>소비자물가조사</h2>
+            <h2>보도자료</h2>
+            <p class="press-time">{press_time} {release_time}</p>
+            <h1>{now.strftime("%Y년 %m월")} 소비자물가동향</h1>
+            <div class="press-dept">
+                <p>담당 부서 경제동향통계심의관 책임자 과  장 박병선(042-481-2530)</p>
+                <p>물가동향과 담당자 사무관 이정화(042-481-2531)</p>
+            </div>
+        </div>
+        
+        <div class="press-section">
+            <h3>일 러 두 기</h3>
+            <ul class="notice-list">
+                <li><strong>□</strong> 현재 소비자물가지수의 기준연도는 2020년, 가중치의 기준연도는 2022년입니다.</li>
+                <li><strong>○</strong> 따라서 품목별 지수와 가중치를 이용하여 상위 단계 지수 계산한 결과와 공표하는 지수는 일치하지 않음에 유의하여 주시기 바랍니다.</li>
+                <li>※ 상세내용은 부록 소비자물가지수 계산식 참조</li>
+                <li><strong>□</strong> 매월 발표하는 소비자물가지수는 가격변동을 측정하는 것으로 가격의 절대수준을 나타내지 않습니다.</li>
+                <li><strong>○</strong> 따라서 지역별로 기준시점(2020년=100)의 가격수준이 다르기 때문에 지역별 소비자물가지수를 이용하여 지역간 상대적인 물가수준 차이를 비교하는 것은 부적절합니다.</li>
+                <li><strong>□</strong> 일반적으로 소비자물가변동 추이 및 국가 간 비교는 1년 전 대비 물가 변동인 전년동월비를 주로 이용하지만, 단기간의 변동인 전월비도 참고하시기 바랍니다.</li>
+                <li><strong>□</strong> 소비자물가지수는 2019년 이전은 소수점 이하 3자리, 2020년 이후는 소수점 이하 2자리로 작성되고 있습니다.</li>
+                <li><strong>○</strong> 통계표에 사용된 "-" 부호의 뜻은 "해당 숫자 없음"을 의미합니다.</li>
+                <li><strong>□</strong> 본문에 수록된 자료는 국가데이터처 홈페이지(http://kostat.go.kr) 및 국가통계포털(http://kosis.kr)을 통해 이용할 수 있습니다.</li>
+            </ul>
+        </div>
+        
+        <div class="press-section">
+            <h3>1. 소비자물가지수 동향</h3>
+            
+            <h4>소비자물가지수 주요 등락률 추이</h4>
+            <table class="press-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2"></th>
+                        <th colspan="3">연도별 통향(전년비)</th>
+                        <th colspan="3">최근 월별 통향(전년동월비)</th>
+                    </tr>
+                    <tr>
+                        <th>2022</th>
+                        <th>2023</th>
+                        <th>2024</th>
+                        <th>{now.strftime("%Y.%m")}월</th>
+                        <th>{now.strftime("%Y.%m")}월</th>
+                        <th>{now.strftime("%Y.%m")}월</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>소비자물가지수</td>
+                        <td>5.1</td>
+                        <td>3.6</td>
+                        <td>2.3</td>
+                        <td>{stats.get('연평균_증가율', {}).get('value', 0):.1f}%</td>
+                        <td>{stats.get('최근_1년_평균', {}).get('value', 0):.1f}</td>
+                        <td>{stats.get('최근_추세', {}).get('value', 0):.1f}%</td>
+                    </tr>
+                    <tr>
+                        <td>식료품 및 에너지 제외지수</td>
+                        <td>3.6</td>
+                        <td>3.4</td>
+                        <td>2.2</td>
+                        <td>2.0</td>
+                        <td>1.3</td>
+                        <td>2.0</td>
+                    </tr>
+                    <tr>
+                        <td>농산물 및 석유류 제외지수</td>
+                        <td>4.1</td>
+                        <td>4.0</td>
+                        <td>2.1</td>
+                        <td>2.3</td>
+                        <td>1.9</td>
+                        <td>2.4</td>
+                    </tr>
+                    <tr>
+                        <td>생활물가지수</td>
+                        <td>6.0</td>
+                        <td>3.9</td>
+                        <td>2.7</td>
+                        <td>2.5</td>
+                        <td>1.5</td>
+                        <td>2.5</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h4>주요 통계량 요약</h4>
+            <ul class="stats-summary">
+                <li><strong>전체 평균 소비자물가지수:</strong> {stats.get('전체_평균', {}).get('value', 'N/A')}</li>
+                <li><strong>최고 물가지수:</strong> {stats.get('최고_물가지수', {}).get('value', 'N/A')} ({stats.get('최고_물가지수', {}).get('date', 'N/A')})</li>
+                <li><strong>최저 물가지수:</strong> {stats.get('최저_물가지수', {}).get('value', 'N/A')} ({stats.get('최저_물가지수', {}).get('date', 'N/A')})</li>
+                <li><strong>최근 1년 평균:</strong> {stats.get('최근_1년_평균', {}).get('value', 'N/A')}</li>
+                <li><strong>최근 3년 평균:</strong> {stats.get('최근_3년_평균', {}).get('value', 'N/A')}</li>
+                <li><strong>연평균 증가율:</strong> {stats.get('연평균_증가율', {}).get('value', 'N/A')}%</li>
+                <li><strong>변동성 (표준편차):</strong> {stats.get('변동성', {}).get('value', 'N/A')}</li>
+            </ul>
+        </div>
+        
+        <div class="press-section">
+            <h3>2. 지출목적별 소비자물가지수 동향</h3>
+    """
+    
+    if '최고_상승률_지출목적' in stats:
+        stat = stats['최고_상승률_지출목적']
+        html += f"""
+            <p><strong>최고 상승률 지출목적:</strong> {stat.get('category', 'N/A')} ({stat.get('value', 'N/A')}%)</p>
+        """
+    
+    if '최저_상승률_지출목적' in stats:
+        stat = stats['최저_상승률_지출목적']
+        html += f"""
+            <p><strong>최저 상승률 지출목적:</strong> {stat.get('category', 'N/A')} ({stat.get('value', 'N/A')}%)</p>
+        """
+    
+    if '상위_지출목적_평균' in stats:
+        html += "<p><strong>상위 지출목적 평균 물가지수:</strong></p><ul>"
+        for cat in stats['상위_지출목적_평균'].get('categories', []):
+            html += f"<li>{cat['name']}: {cat['value']}</li>"
+        html += "</ul>"
+    
+    html += """
+        </div>
+        
+        <div class="press-section">
+            <h3>3. 종합 분석</h3>
+            <div class="analysis-content">
+    """
+    
+    analysis_text = f"""
+                <p>전체 기간 평균 소비자물가지수는 {stats.get('전체_평균', {}).get('value', 'N/A')}로 나타났으며, 
+                최근 1년 평균은 {stats.get('최근_1년_평균', {}).get('value', 'N/A')}입니다.</p>
+                
+                <p>연평균 증가율은 {stats.get('연평균_증가율', {}).get('value', 'N/A')}%로, 
+                물가가 지속적으로 상승하는 추세를 보이고 있습니다.</p>
+                
+                <p>최근 6개월 추세는 {stats.get('최근_추세', {}).get('trend', 'N/A')} 추세로, 
+                이전 6개월 대비 {abs(stats.get('최근_추세', {}).get('value', 0)):.2f}% 변화를 보였습니다.</p>
+    """
+    
+    html += analysis_text
+    html += """
+            </div>
+        </div>
+    </div>
+    """
+    
+    return html
+
 @app.route('/api/press-release')
-def download_press_release():
+def get_press_release():
+    """보도자료를 HTML 형식으로 반환"""
     try:
         df = load_data()
         stats = calculate_statistics(df)
-        buffer = generate_press_release(stats)
-        
-        return send_file(
-            buffer,
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            as_attachment=True,
-            download_name=f'소비자물가지수_보도자료_{datetime.now().strftime("%Y%m%d")}.docx'
-        )
+        html_content = generate_press_release_html(stats)
+        return jsonify({'success': True, 'html': html_content})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

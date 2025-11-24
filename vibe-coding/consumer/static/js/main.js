@@ -4,6 +4,8 @@ const loading = document.getElementById('loading');
 const error = document.getElementById('error');
 const statistics = document.getElementById('statistics');
 const statsGrid = document.getElementById('statsGrid');
+const pressRelease = document.getElementById('pressRelease');
+const pressReleaseContent = document.getElementById('pressReleaseContent');
 
 let currentStats = null;
 
@@ -33,23 +35,27 @@ analyzeBtn.addEventListener('click', async () => {
 });
 
 downloadBtn.addEventListener('click', async () => {
+    downloadBtn.disabled = true;
+    loading.classList.remove('hidden');
+    error.classList.add('hidden');
+    
     try {
         const response = await fetch('/api/press-release');
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `소비자물가지수_보도자료_${new Date().toISOString().split('T')[0]}.docx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+        const data = await response.json();
+        
+        if (data.success) {
+            pressReleaseContent.innerHTML = data.html;
+            pressRelease.classList.remove('hidden');
+            // 보도자료 섹션으로 스크롤
+            pressRelease.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
-            showError('보도자료 다운로드 중 오류가 발생했습니다.');
+            showError(data.error || '보도자료 생성 중 오류가 발생했습니다.');
         }
     } catch (err) {
-        showError('다운로드 오류: ' + err.message);
+        showError('보도자료 로드 오류: ' + err.message);
+    } finally {
+        loading.classList.add('hidden');
+        downloadBtn.disabled = false;
     }
 });
 
