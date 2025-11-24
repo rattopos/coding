@@ -4,7 +4,12 @@
 
 ## 주요 기능
 
-1. **주요 통계량 10개 분석**
+1. **KOSIS API 연동**
+   - KOSIS.kr OpenAPI를 통해 실시간 데이터 수집
+   - 지출목적별 소비자물가지수 데이터 자동 로드
+   - Excel 파일 업로드 없이 API에서 직접 데이터 가져오기
+
+2. **주요 통계량 10개 분석**
    - 전체 평균 물가지수
    - 최고/최저 물가지수
    - 최근 1년/3년 평균
@@ -13,28 +18,27 @@
    - 지출목적별 상승률 분석
    - 최근 추세 분석
 
-2. **보도자료 자동 생성**
+3. **보도자료 자동 생성**
    - Word 문서 형식의 보도자료 자동 생성
    - 통계량과 종합 분석 포함
-
-3. **PDF to DOCX 변환**
-   - PDF 파일을 Word 문서로 변환
-   - pypandoc과 PyPDF2를 사용한 변환 기능
-   - 웹 인터페이스를 통한 간편한 변환
 
 ## 설치 방법
 
 1. Python 3.8 이상이 설치되어 있어야 합니다.
 
-2. Pandoc 설치 (PDF 변환 기능 사용 시 필요):
-   - macOS: `brew install pandoc`
-   - Ubuntu/Debian: `sudo apt-get install pandoc`
-   - Windows: [Pandoc 공식 사이트](https://pandoc.org/installing.html)에서 다운로드
-
-3. 필요한 패키지 설치:
+2. 필요한 패키지 설치:
 ```bash
 pip install -r requirements.txt
 ```
+
+3. KOSIS API 키 설정:
+   - [KOSIS OpenAPI](https://kosis.kr/openapi/openApiList.do)에서 API 키 발급
+   - 프로젝트 루트 디렉토리에 `.env` 파일 생성
+   - `.env` 파일에 다음 내용 추가:
+   ```
+   KOSIS_API_KEY=your_api_key_here
+   ```
+   - 발급받은 API 키로 `your_api_key_here` 부분을 교체
 
 ## 실행 방법
 
@@ -51,13 +55,13 @@ http://localhost:8889
 3. 사용 방법:
    - **통계 분석**: "통계 분석 실행" 버튼을 클릭하여 데이터 분석
    - **보도자료 생성**: 분석 결과 확인 후 "보도자료 다운로드" 버튼 클릭
-   - **PDF 변환**: "PDF 파일 선택" 버튼으로 PDF 파일 업로드 후 "DOCX로 변환" 버튼 클릭
 
 ## 프로젝트 구조
 
 ```
 vibe-coding/
 ├── app.py                          # Flask 백엔드 애플리케이션
+├── .env                            # 환경 변수 (KOSIS API KEY)
 ├── templates/
 │   └── index.html                  # 메인 HTML 템플릿
 ├── static/
@@ -74,8 +78,9 @@ vibe-coding/
 - **Backend**: Flask (Python)
 - **Frontend**: HTML, CSS, JavaScript
 - **Data Processing**: pandas, numpy
+- **API Integration**: KOSIS OpenAPI (requests)
 - **Document Generation**: python-docx
-- **PDF Conversion**: pypandoc, PyPDF2
+- **Environment Management**: python-dotenv
 
 ## 주요 통계량 설명
 
