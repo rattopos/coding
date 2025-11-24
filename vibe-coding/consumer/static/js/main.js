@@ -63,9 +63,9 @@ function displayStatistics(stats) {
     statsGrid.innerHTML = '';
     
     const statOrder = [
-        '전체_평균', '최고_물가지수', '최저_물가지수', '최근_1년_평균', 
-        '최근_3년_평균', '연평균_증가율', '변동성', '최고_상승률_지출목적',
-        '최저_상승률_지출목적', '상위_지출목적_평균', '최근_추세'
+        '최근_3개월_평균_증가율', '최고_상승률_달', '최저_상승률_달', '물가_상승_추세',
+        '변동성_지수', '최고_변동성_지출목적', '최저_변동성_지출목적', '물가_안정성_점수',
+        '최근_6개월_변화', '계절성_패턴'
     ];
     
     statOrder.forEach(key => {
@@ -121,6 +121,14 @@ function createStatCard(stat, key) {
         const detail = document.createElement('div');
         detail.className = 'stat-detail';
         detail.textContent = `추세: ${stat.trend}`;
+        card.appendChild(detail);
+    }
+    
+    // 계절성 패턴 특수 처리
+    if (stat.highest_month) {
+        const detail = document.createElement('div');
+        detail.className = 'stat-detail';
+        detail.textContent = `최고: ${stat.highest_month} (${stat.highest_value}), 최저: ${stat.lowest_month} (${stat.lowest_value})`;
         card.appendChild(detail);
     }
     

@@ -201,7 +201,7 @@ def convert_kosis_response_to_dataframe(data):
             raise Exception(f"{error_msg} (로컬 파일도 없음)")
 
 def calculate_statistics(df):
-    """PDF 형식에 맞춘 통계량 계산"""
+    """흥미로운 통계량 10개 계산"""
     # 데이터 전처리
     data_cols = [col for col in df.columns if col not in ['시도별', '지출목적별']]
     data_cols = sorted(data_cols)  # 날짜 순서대로 정렬
@@ -212,54 +212,12 @@ def calculate_statistics(df):
     
     stats = {}
     
-    # 1. 연도별 통향(전년비) 계산
-    # 2022, 2023, 2024년의 전년 대비 증가율
-    year_growth = {}
-    years = sorted(set([col.split('.')[0] for col in data_cols if '.' in col]))
-    
-    for year in ['2022', '2023', '2024']:
-        if year not in years:
-            continue
-        
-        # 해당 연도의 모든 월 데이터
-        year_cols = [col for col in data_cols if col.startswith(year)]
-        if len(year_cols) == 0:
-            continue
-        
-        year_values = pd.to_numeric(total_index[year_cols], errors='coerce').dropna()
-        if len(year_values) == 0:
-            continue
-        
-        year_avg = year_values.mean()
-        
-        # 전년도 평균 계산
-        prev_year = str(int(year) - 1)
-        prev_year_cols = [col for col in data_cols if col.startswith(prev_year)]
-        if len(prev_year_cols) > 0:
-            prev_year_values = pd.to_numeric(total_index[prev_year_cols], errors='coerce').dropna()
-            if len(prev_year_values) > 0:
-                prev_year_avg = prev_year_values.mean()
-                if prev_year_avg > 0:
-                    growth_rate = ((year_avg - prev_year_avg) / prev_year_avg) * 100
-                    year_growth[year] = round(growth_rate, 1)
-    
-    stats['연도별_통향'] = {
-        '2022': year_growth.get('2022', None),
-        '2023': year_growth.get('2023', None),
-        '2024': year_growth.get('2024', None),
-        'description': '연도별 통향(전년비)'
-    }
-    
-    # 2. 최근 월별 통향(전년동월비) 계산
-    # 최근 3-4개월의 전년동월 대비 증가율
+    # 1. 최근 3개월 평균 증가율 (전년동월비)
     monthly_growth = {}
-    
-    # 최근 4개월 데이터에서 전년동월비 계산
-    recent_months = data_cols[-4:] if len(data_cols) >= 4 else data_cols
+    recent_months = data_cols[-3:] if len(data_cols) >= 3 else data_cols
     
     for month_str in recent_months:
         try:
-            # 전년동월 찾기
             year, month = month_str.split('.')
             prev_year = str(int(year) - 1)
             prev_year_str = f"{prev_year}.{month}"
@@ -274,77 +232,154 @@ def calculate_statistics(df):
         except:
             continue
     
-    stats['최근_월별_통향'] = {
-        'values': monthly_growth,
-        'description': '최근 월별 통향(전년동월비)'
+    if monthly_growth:
+        avg_growth = np.mean(list(monthly_growth.values()))
+        stats['최근_3개월_평균_증가율'] = {
+            'value': round(avg_growth, 2),
+            'unit': '%',
+            'description': '최근 3개월 평균 증가율 (전년동월비)'
+        }
+    
+    # 2. 최고 상승률 달 (전년동월비 기준)
+    all_monthly_growth = {}
+    for month_str in data_cols:
+        try:
+            year, month = month_str.split('.')
+            prev_year = str(int(year) - 1)
+            prev_year_str = f"{prev_year}.{month}"
+            
+            if month_str in data_cols and prev_year_str in data_cols:
+                current_val = pd.to_numeric(total_index[month_str], errors='coerce')
+                prev_val = pd.to_numeric(total_index[prev_year_str], errors='coerce')
+                
+                if not pd.isna(current_val) and not pd.isna(prev_val) and prev_val > 0:
+                    growth = ((current_val - prev_val) / prev_val) * 100
+                    all_monthly_growth[month_str] = round(growth, 1)
+        except:
+            continue
+    
+    if all_monthly_growth:
+        max_month = max(all_monthly_growth.items(), key=lambda x: x[1])
+        stats['최고_상승률_달'] = {
+            'value': max_month[1],
+            'date': max_month[0],
+            'unit': '%',
+            'description': '최고 상승률을 기록한 달 (전년동월비)'
+        }
+    
+    # 3. 최저 상승률 달 (전년동월비 기준)
+    if all_monthly_growth:
+        min_month = min(all_monthly_growth.items(), key=lambda x: x[1])
+        stats['최저_상승률_달'] = {
+            'value': min_month[1],
+            'date': min_month[0],
+            'unit': '%',
+            'description': '최저 상승률을 기록한 달 (전년동월비)'
+        }
+    
+    # 4. 물가 상승 추세 (선형 회귀 기울기)
+    if len(total_values) >= 2:
+        x = np.arange(len(total_values))
+        y = total_values.values
+        slope = np.polyfit(x, y, 1)[0]
+        stats['물가_상승_추세'] = {
+            'value': round(slope, 4),
+            'unit': '월당',
+            'description': '물가 상승 추세 (선형 회귀 기울기)'
+        }
+    
+    # 5. 변동성 지수 (표준편차)
+    stats['변동성_지수'] = {
+        'value': round(total_values.std(), 2),
+        'description': '물가지수 변동성 (표준편차)'
     }
     
-    # 3. 현재 물가지수 (최근 월)
-    if len(data_cols) > 0:
-        latest_col = data_cols[-1]
-        latest_value = pd.to_numeric(total_index[latest_col], errors='coerce')
-        if not pd.isna(latest_value):
-            stats['현재_물가지수'] = {
-                'value': round(latest_value, 2),
-                'date': latest_col,
-                'description': f'현재 물가지수 ({latest_col})'
-            }
-    
-    # 4. 지출목적별 동향 (전년동월비)
-    category_growth = {}
+    # 6. 최고 변동성 지출목적
+    category_volatility = {}
     for idx, row in df.iterrows():
         if pd.isna(row['지출목적별']) or row['지출목적별'] == '0 총지수':
             continue
         
         cat_values = pd.to_numeric(row[data_cols], errors='coerce').dropna()
-        if len(cat_values) >= 2:
-            # 최근 월과 전년동월 비교
-            latest_col = data_cols[-1]
-            latest_val = pd.to_numeric(row[latest_col], errors='coerce')
+        if len(cat_values) > 1:
+            volatility = cat_values.std()
+            category_volatility[row['지출목적별']] = volatility
+    
+    if category_volatility:
+        max_vol = max(category_volatility.items(), key=lambda x: x[1])
+        stats['최고_변동성_지출목적'] = {
+            'category': max_vol[0],
+            'value': round(max_vol[1], 2),
+            'description': '가장 변동성이 큰 지출목적'
+        }
+    
+    # 7. 최저 변동성 지출목적
+    if category_volatility:
+        min_vol = min(category_volatility.items(), key=lambda x: x[1])
+        stats['최저_변동성_지출목적'] = {
+            'category': min_vol[0],
+            'value': round(min_vol[1], 2),
+            'description': '가장 안정적인 지출목적'
+        }
+    
+    # 8. 물가 안정성 점수 (변동성의 역수, 0-100 스케일)
+    if total_values.std() > 0:
+        stability_score = max(0, min(100, 100 - (total_values.std() / total_values.mean() * 100)))
+        stats['물가_안정성_점수'] = {
+            'value': round(stability_score, 1),
+            'unit': '점',
+            'description': '물가 안정성 점수 (0-100, 높을수록 안정적)'
+        }
+    
+    # 9. 최근 6개월 vs 이전 6개월 비교
+    if len(data_cols) >= 12:
+        recent_6m = data_cols[-6:]
+        prev_6m = data_cols[-12:-6]
+        
+        recent_6m_values = pd.to_numeric(total_index[recent_6m], errors='coerce').dropna()
+        prev_6m_values = pd.to_numeric(total_index[prev_6m], errors='coerce').dropna()
+        
+        if len(recent_6m_values) > 0 and len(prev_6m_values) > 0:
+            recent_avg = recent_6m_values.mean()
+            prev_avg = prev_6m_values.mean()
+            change = ((recent_avg - prev_avg) / prev_avg) * 100 if prev_avg > 0 else 0
             
-            # 전년동월 찾기
-            try:
-                year, month = latest_col.split('.')
-                prev_year = str(int(year) - 1)
-                prev_year_col = f"{prev_year}.{month}"
-                
-                if prev_year_col in data_cols:
-                    prev_val = pd.to_numeric(row[prev_year_col], errors='coerce')
-                    if not pd.isna(latest_val) and not pd.isna(prev_val) and prev_val > 0:
-                        growth = ((latest_val - prev_val) / prev_val) * 100
-                        category_growth[row['지출목적별']] = round(growth, 1)
-            except:
-                continue
+            stats['최근_6개월_변화'] = {
+                'value': round(change, 2),
+                'unit': '%',
+                'description': '최근 6개월 vs 이전 6개월 변화율',
+                'trend': '상승' if change > 0 else '하락' if change < 0 else '유지'
+            }
     
-    if category_growth:
-        # 상위 3개와 하위 3개
-        sorted_categories = sorted(category_growth.items(), key=lambda x: x[1], reverse=True)
-        stats['지출목적별_상승률_상위'] = {
-            'categories': [{'name': cat[0], 'value': cat[1]} for cat in sorted_categories[:3]],
-            'description': '지출목적별 전년동월비 상승률 상위 3개'
-        }
-        stats['지출목적별_상승률_하위'] = {
-            'categories': [{'name': cat[0], 'value': cat[1]} for cat in sorted_categories[-3:]],
-            'description': '지출목적별 전년동월비 상승률 하위 3개'
-        }
+    # 10. 계절성 패턴 (월별 평균)
+    monthly_avgs = {}
+    for month_str in data_cols:
+        try:
+            year, month = month_str.split('.')
+            if month not in monthly_avgs:
+                monthly_avgs[month] = []
+            val = pd.to_numeric(total_index[month_str], errors='coerce')
+            if not pd.isna(val):
+                monthly_avgs[month].append(val)
+        except:
+            continue
     
-    # 5. 전체 기간 평균
-    stats['전체_평균'] = {
-        'value': round(total_values.mean(), 2),
-        'description': '전체 기간 평균 소비자물가지수'
-    }
-    
-    # 6. 최고/최저 물가지수
-    stats['최고_물가지수'] = {
-        'value': round(total_values.max(), 2),
-        'date': total_values.idxmax(),
-        'description': '전체 기간 중 최고 물가지수'
-    }
-    stats['최저_물가지수'] = {
-        'value': round(total_values.min(), 2),
-        'date': total_values.idxmin(),
-        'description': '전체 기간 중 최저 물가지수'
-    }
+    if monthly_avgs:
+        monthly_avg_values = {month: np.mean(vals) for month, vals in monthly_avgs.items() if len(vals) > 0}
+        if monthly_avg_values:
+            max_month = max(monthly_avg_values.items(), key=lambda x: x[1])
+            min_month = min(monthly_avg_values.items(), key=lambda x: x[1])
+            
+            month_names = {'01': '1월', '02': '2월', '03': '3월', '04': '4월', '05': '5월', '06': '6월',
+                          '07': '7월', '08': '8월', '09': '9월', '10': '10월', '11': '11월', '12': '12월'}
+            
+            stats['계절성_패턴'] = {
+                'highest_month': month_names.get(max_month[0], max_month[0]),
+                'highest_value': round(max_month[1], 2),
+                'lowest_month': month_names.get(min_month[0], min_month[0]),
+                'lowest_value': round(min_month[1], 2),
+                'description': '계절성 패턴 (월별 평균 물가지수)'
+            }
     
     return stats
 
@@ -614,151 +649,162 @@ def generate_press_release_html(stats):
     press_time = f'보도시점 {now.strftime("%Y. %m. %d")}.({weekday_kr}) 08:00'
     release_time = f'배포{now.strftime("%Y. %m. %d")}.({weekday_kr}) 07:30'
     
+    # 값 포맷팅 헬퍼 함수
+    def format_value(val):
+        if val is None:
+            return '-'
+        try:
+            return f"{float(val):.1f}"
+        except (ValueError, TypeError):
+            return '-'
+    
     html = f"""
-    <div class="press-release">
+    <div class="press-release" style="color: #212529;">
         <div class="press-header">
-            <h2>소비자물가조사</h2>
-            <h2>보도자료</h2>
-            <p class="press-time">{press_time} {release_time}</p>
-            <h1>{now.strftime("%Y년 %m월")} 소비자물가동향</h1>
-            <div class="press-dept">
+            <h2 style="color: #1a1a1a;">소비자물가조사</h2>
+            <h2 style="color: #1a1a1a;">보도자료</h2>
+            <p class="press-time" style="color: #495057;">{press_time} {release_time}</p>
+            <h1 style="color: #1a1a1a;">{now.strftime("%Y년 %m월")} 소비자물가동향</h1>
+            <div class="press-dept" style="color: #495057;">
                 <p>담당 부서 경제동향통계심의관 책임자 과  장 박병선(042-481-2530)</p>
                 <p>물가동향과 담당자 사무관 이정화(042-481-2531)</p>
             </div>
         </div>
         
-        <div class="press-section">
-            <h3>일 러 두 기</h3>
-            <ul class="notice-list">
-                <li><strong>□</strong> 현재 소비자물가지수의 기준연도는 2020년, 가중치의 기준연도는 2022년입니다.</li>
-                <li><strong>○</strong> 따라서 품목별 지수와 가중치를 이용하여 상위 단계 지수 계산한 결과와 공표하는 지수는 일치하지 않음에 유의하여 주시기 바랍니다.</li>
-                <li>※ 상세내용은 부록 소비자물가지수 계산식 참조</li>
-                <li><strong>□</strong> 매월 발표하는 소비자물가지수는 가격변동을 측정하는 것으로 가격의 절대수준을 나타내지 않습니다.</li>
-                <li><strong>○</strong> 따라서 지역별로 기준시점(2020년=100)의 가격수준이 다르기 때문에 지역별 소비자물가지수를 이용하여 지역간 상대적인 물가수준 차이를 비교하는 것은 부적절합니다.</li>
-                <li><strong>□</strong> 일반적으로 소비자물가변동 추이 및 국가 간 비교는 1년 전 대비 물가 변동인 전년동월비를 주로 이용하지만, 단기간의 변동인 전월비도 참고하시기 바랍니다.</li>
-                <li><strong>□</strong> 소비자물가지수는 2019년 이전은 소수점 이하 3자리, 2020년 이후는 소수점 이하 2자리로 작성되고 있습니다.</li>
-                <li><strong>○</strong> 통계표에 사용된 "-" 부호의 뜻은 "해당 숫자 없음"을 의미합니다.</li>
-                <li><strong>□</strong> 본문에 수록된 자료는 국가데이터처 홈페이지(http://kostat.go.kr) 및 국가통계포털(http://kosis.kr)을 통해 이용할 수 있습니다.</li>
+        <div class="press-section" style="color: #212529;">
+            <h3 style="color: #1a1a1a;">일 러 두 기</h3>
+            <ul class="notice-list" style="color: #212529;">
+                <li style="color: #212529;"><strong style="color: #667eea;">□</strong> 현재 소비자물가지수의 기준연도는 2020년, 가중치의 기준연도는 2022년입니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">○</strong> 따라서 품목별 지수와 가중치를 이용하여 상위 단계 지수 계산한 결과와 공표하는 지수는 일치하지 않음에 유의하여 주시기 바랍니다.</li>
+                <li style="color: #212529;">※ 상세내용은 부록 소비자물가지수 계산식 참조</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">□</strong> 매월 발표하는 소비자물가지수는 가격변동을 측정하는 것으로 가격의 절대수준을 나타내지 않습니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">○</strong> 따라서 지역별로 기준시점(2020년=100)의 가격수준이 다르기 때문에 지역별 소비자물가지수를 이용하여 지역간 상대적인 물가수준 차이를 비교하는 것은 부적절합니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">□</strong> 일반적으로 소비자물가변동 추이 및 국가 간 비교는 1년 전 대비 물가 변동인 전년동월비를 주로 이용하지만, 단기간의 변동인 전월비도 참고하시기 바랍니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">□</strong> 소비자물가지수는 2019년 이전은 소수점 이하 3자리, 2020년 이후는 소수점 이하 2자리로 작성되고 있습니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">○</strong> 통계표에 사용된 "-" 부호의 뜻은 "해당 숫자 없음"을 의미합니다.</li>
+                <li style="color: #212529;"><strong style="color: #667eea;">□</strong> 본문에 수록된 자료는 국가데이터처 홈페이지(http://kostat.go.kr) 및 국가통계포털(http://kosis.kr)을 통해 이용할 수 있습니다.</li>
             </ul>
         </div>
         
-        <div class="press-section">
-            <h3>1. 소비자물가지수 동향</h3>
+        <div class="press-section" style="color: #212529;">
+            <h3 style="color: #1a1a1a;">1. 주요 통계량 분석</h3>
             
-            <h4>소비자물가지수 주요 등락률 추이</h4>
-            <table class="press-table">
-                <thead>
-                    <tr>
-                        <th rowspan="2"></th>
-                        <th colspan="3">연도별 통향(전년비)</th>
-                        <th colspan="4">최근 월별 통향(전년동월비)</th>
-                    </tr>
-                    <tr>
-                        <th>2022</th>
-                        <th>2023</th>
-                        <th>2024</th>
+            <h4 style="color: #2d2d2d;">핵심 통계 지표</h4>
+            <ul class="stats-summary" style="color: #212529;">
     """
     
-    # 최근 월별 통향 헤더 생성
-    monthly_growth = stats.get('최근_월별_통향', {}).get('values', {})
-    month_headers = list(monthly_growth.keys())[-4:] if len(monthly_growth) >= 4 else list(monthly_growth.keys())
+    # 1. 최근 3개월 평균 증가율
+    recent_3m = stats.get('최근_3개월_평균_증가율', {})
+    if recent_3m.get('value') is not None:
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최근 3개월 평균 증가율:</strong> {format_value(recent_3m.get('value'))}% (전년동월비)</li>"
     
-    for month in month_headers:
-        month_display = month.replace('.', '월 ').replace('2025', "'25")
-        html += f"<th>{month_display}</th>"
+    # 2. 최고 상승률 달
+    max_month = stats.get('최고_상승률_달', {})
+    if max_month.get('value') is not None:
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최고 상승률 달:</strong> {max_month.get('date', 'N/A')} ({format_value(max_month.get('value'))}%)</li>"
     
-    # 부족한 경우 빈 헤더 추가
-    while len(month_headers) < 4:
-        html += "<th></th>"
-        month_headers.append('')
+    # 3. 최저 상승률 달
+    min_month = stats.get('최저_상승률_달', {})
+    if min_month.get('value') is not None:
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최저 상승률 달:</strong> {min_month.get('date', 'N/A')} ({format_value(min_month.get('value'))}%)</li>"
+    
+    # 4. 물가 상승 추세
+    trend = stats.get('물가_상승_추세', {})
+    if trend.get('value') is not None:
+        trend_val = trend.get('value')
+        trend_desc = '상승' if trend_val > 0 else '하락' if trend_val < 0 else '유지'
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>물가 상승 추세:</strong> {format_value(trend_val)} (월당, {trend_desc} 추세)</li>"
+    
+    # 5. 변동성 지수
+    volatility = stats.get('변동성_지수', {})
+    if volatility.get('value') is not None:
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>변동성 지수:</strong> {format_value(volatility.get('value'))} (표준편차)</li>"
+    
+    # 6. 최고 변동성 지출목적
+    max_vol = stats.get('최고_변동성_지출목적', {})
+    if max_vol.get('category'):
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최고 변동성 지출목적:</strong> {max_vol.get('category', 'N/A')} (변동성: {format_value(max_vol.get('value'))})</li>"
+    
+    # 7. 최저 변동성 지출목적
+    min_vol = stats.get('최저_변동성_지출목적', {})
+    if min_vol.get('category'):
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최저 변동성 지출목적:</strong> {min_vol.get('category', 'N/A')} (변동성: {format_value(min_vol.get('value'))})</li>"
+    
+    # 8. 물가 안정성 점수
+    stability = stats.get('물가_안정성_점수', {})
+    if stability.get('value') is not None:
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>물가 안정성 점수:</strong> {format_value(stability.get('value'))}점 (0-100, 높을수록 안정적)</li>"
+    
+    # 9. 최근 6개월 변화
+    recent_6m = stats.get('최근_6개월_변화', {})
+    if recent_6m.get('value') is not None:
+        trend_desc = recent_6m.get('trend', '유지')
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>최근 6개월 변화:</strong> {format_value(recent_6m.get('value'))}% ({trend_desc} 추세)</li>"
+    
+    # 10. 계절성 패턴
+    seasonal = stats.get('계절성_패턴', {})
+    if seasonal.get('highest_month'):
+        html += f"<li style='color: #212529;'><strong style='color: #1a1a1a;'>계절성 패턴:</strong> 최고 {seasonal.get('highest_month', 'N/A')} ({format_value(seasonal.get('highest_value'))}), 최저 {seasonal.get('lowest_month', 'N/A')} ({format_value(seasonal.get('lowest_value'))})</li>"
     
     html += """
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>소비자물가지수</td>
+            </ul>
+        </div>
+        
+        <div class="press-section" style="color: #212529;">
+            <h3 style="color: #1a1a1a;">2. 지출목적별 분석</h3>
     """
     
-    # 연도별 통향 데이터
-    year_trend = stats.get('연도별_통향', {})
-    html += f"""
-                        <td>{year_trend.get('2022', '-') if year_trend.get('2022') is not None else '-'}</td>
-                        <td>{year_trend.get('2023', '-') if year_trend.get('2023') is not None else '-'}</td>
-                        <td>{year_trend.get('2024', '-') if year_trend.get('2024') is not None else '-'}</td>
+    if '최고_변동성_지출목적' in stats:
+        max_vol = stats['최고_변동성_지출목적']
+        html += f"<h4 style='color: #2d2d2d;'>가장 변동성이 큰 지출목적</h4>"
+        html += f"<p style='color: #212529;'><strong style='color: #1a1a1a;'>{max_vol.get('category', 'N/A')}:</strong> 변동성 {format_value(max_vol.get('value'))}</p>"
+    
+    if '최저_변동성_지출목적' in stats:
+        min_vol = stats['최저_변동성_지출목적']
+        html += f"<h4 style='color: #2d2d2d;'>가장 안정적인 지출목적</h4>"
+        html += f"<p style='color: #212529;'><strong style='color: #1a1a1a;'>{min_vol.get('category', 'N/A')}:</strong> 변동성 {format_value(min_vol.get('value'))}</p>"
+    
+    html += """
+        </div>
+        
+        <div class="press-section" style="color: #212529;">
+            <h3 style="color: #1a1a1a;">3. 종합 분석</h3>
+            <div class="analysis-content" style="color: #212529;">
     """
     
-    # 최근 월별 통향 데이터
-    for month in month_headers:
-        if month and month in monthly_growth:
-            html += f"<td>{monthly_growth[month]}</td>"
+    # 종합 분석 텍스트 생성
+    analysis_parts = []
+    
+    if recent_3m.get('value') is not None:
+        analysis_parts.append(f"최근 3개월 평균 증가율은 {format_value(recent_3m.get('value'))}%로 나타났습니다.")
+    
+    if trend.get('value') is not None:
+        trend_desc = '상승' if trend.get('value') > 0 else '하락' if trend.get('value') < 0 else '유지'
+        analysis_parts.append(f"물가 상승 추세는 {trend_desc} 추세를 보이고 있습니다.")
+    
+    if stability.get('value') is not None:
+        stability_val = float(stability.get('value'))
+        if stability_val >= 70:
+            stability_desc = "매우 안정적"
+        elif stability_val >= 50:
+            stability_desc = "안정적"
         else:
-            html += "<td>-</td>"
+            stability_desc = "불안정"
+        analysis_parts.append(f"물가 안정성 점수는 {format_value(stability.get('value'))}점으로 {stability_desc}입니다.")
     
-    html += """
-                    </tr>
-                </tbody>
-            </table>
-            
-            <h4>주요 통계량 요약</h4>
-            <ul class="stats-summary">
-                <li><strong>현재 물가지수:</strong> {stats.get('현재_물가지수', {}).get('value', 'N/A')} ({stats.get('현재_물가지수', {}).get('date', 'N/A')})</li>
-                <li><strong>전체 평균 소비자물가지수:</strong> {stats.get('전체_평균', {}).get('value', 'N/A')}</li>
-                <li><strong>최고 물가지수:</strong> {stats.get('최고_물가지수', {}).get('value', 'N/A')} ({stats.get('최고_물가지수', {}).get('date', 'N/A')})</li>
-                <li><strong>최저 물가지수:</strong> {stats.get('최저_물가지수', {}).get('value', 'N/A')} ({stats.get('최저_물가지수', {}).get('date', 'N/A')})</li>
-            </ul>
-        </div>
-        
-        <div class="press-section">
-            <h3>2. 지출목적별 소비자물가지수 동향</h3>
-    """
+    if seasonal.get('highest_month'):
+        analysis_parts.append(f"계절성 패턴을 보면 {seasonal.get('highest_month')}에 가장 높고 {seasonal.get('lowest_month')}에 가장 낮은 물가지수를 보입니다.")
     
-    if '지출목적별_상승률_상위' in stats:
-        html += "<h4>지출목적별 전년동월비 상승률 상위</h4><ul>"
-        for cat in stats['지출목적별_상승률_상위'].get('categories', []):
-            html += f"<li><strong>{cat['name']}:</strong> {cat['value']}%</li>"
-        html += "</ul>"
+    if recent_6m.get('value') is not None:
+        trend_desc = recent_6m.get('trend', '유지')
+        analysis_parts.append(f"최근 6개월은 이전 6개월 대비 {format_value(recent_6m.get('value'))}% {trend_desc} 추세를 보였습니다.")
     
-    if '지출목적별_상승률_하위' in stats:
-        html += "<h4>지출목적별 전년동월비 상승률 하위</h4><ul>"
-        for cat in stats['지출목적별_상승률_하위'].get('categories', []):
-            html += f"<li><strong>{cat['name']}:</strong> {cat['value']}%</li>"
-        html += "</ul>"
+    analysis_text = ""
+    for part in analysis_parts:
+        analysis_text += f"<p style='color: #212529;'>{part}</p>\n                "
     
-    html += """
-        </div>
-        
-        <div class="press-section">
-            <h3>3. 종합 분석</h3>
-            <div class="analysis-content">
-    """
-    
-    # 연도별 통향 요약
-    year_trend = stats.get('연도별_통향', {})
-    year_summary = []
-    if year_trend.get('2022') is not None:
-        year_summary.append(f"2022년 {year_trend['2022']}%")
-    if year_trend.get('2023') is not None:
-        year_summary.append(f"2023년 {year_trend['2023']}%")
-    if year_trend.get('2024') is not None:
-        year_summary.append(f"2024년 {year_trend['2024']}%")
-    
-    # 최근 월별 통향 요약
-    monthly_growth = stats.get('최근_월별_통향', {}).get('values', {})
-    monthly_summary = []
-    for month, value in list(monthly_growth.items())[-3:]:
-        month_display = month.replace('.', '월 ')
-        monthly_summary.append(f"{month_display} {value}%")
-    
-    analysis_text = f"""
-                <p>현재 소비자물가지수는 {stats.get('현재_물가지수', {}).get('value', 'N/A')} ({stats.get('현재_물가지수', {}).get('date', 'N/A')})입니다.</p>
-                
-                <p>연도별 통향(전년비)은 {', '.join(year_summary) if year_summary else 'N/A'}로 나타났습니다.</p>
-                
-                <p>최근 월별 통향(전년동월비)은 {', '.join(monthly_summary) if monthly_summary else 'N/A'}입니다.</p>
-                
-                <p>전체 기간 평균 소비자물가지수는 {stats.get('전체_평균', {}).get('value', 'N/A')}로 나타났습니다.</p>
-    """
+    if not analysis_text:
+        analysis_text = "<p style='color: #212529;'>통계량 데이터를 분석한 결과를 종합적으로 제시합니다.</p>"
     
     html += analysis_text
     html += """
