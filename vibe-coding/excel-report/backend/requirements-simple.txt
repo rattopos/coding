@@ -1,7 +1,0 @@
-Flask
-flask-cors
-pandas
-openpyxl
-xlrd
-numpy
-

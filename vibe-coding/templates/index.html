@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>소비자물가지수 통계 분석</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>지출목적별 소비자물가지수 통계 분석</h1>
+            <p class="subtitle">주요 통계량 10개 분석 및 보도자료 생성</p>
+        </header>
+
+        <div class="controls">
+            <button id="analyzeBtn" class="btn btn-primary">통계 분석 실행</button>
+            <button id="downloadBtn" class="btn btn-secondary" disabled>보도자료 다운로드</button>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>데이터를 분석하는 중...</p>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+
+        <div id="statistics" class="statistics hidden">
+            <h2>주요 통계량</h2>
+            <div class="stats-grid" id="statsGrid"></div>
+        </div>
+
+        <div class="pdf-converter-section">
+            <h2>PDF to DOCX 변환</h2>
+            <p class="subtitle">PDF 파일을 Word 문서로 변환합니다</p>
+            
+            <div class="upload-area">
+                <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;">
+                <label for="pdfFileInput" class="file-input-label">
+                    <span>PDF 파일 선택</span>
+                </label>
+                <span id="fileName" class="file-name"></span>
+            </div>
+            
+            <div class="controls">
+                <button id="convertBtn" class="btn btn-primary" disabled>DOCX로 변환</button>
+            </div>
+            
+            <div id="convertLoading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>PDF를 변환하는 중...</p>
+            </div>
+            
+            <div id="convertError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+

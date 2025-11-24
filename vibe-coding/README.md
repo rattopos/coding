@@ -1,225 +1,95 @@
-# 📊 Excel Insights - 데이터 분석 보도자료 생성기
+# 소비자물가지수 통계 분석 앱
 
-엑셀 파일을 업로드하면 자동으로 데이터를 분석하여 가장 중요한 인사이트 5가지를 추출하고, 적절한 차트와 함께 보도자료 형식으로 제공하는 웹 애플리케이션입니다.
+지출목적별 소비자물가지수 데이터를 분석하여 주요 통계량 10개를 도출하고 보도자료를 자동 생성하는 웹 애플리케이션입니다.
 
-## ✨ 주요 기능
+## 주요 기능
 
-1. **엑셀 파일 업로드**: .xlsx, .xls, .csv 파일 지원
-2. **자동 데이터 분석**: 업로드된 데이터에서 중요한 패턴과 인사이트 추출
-3. **인터랙티브 차트**: Recharts를 활용한 다양한 시각화 (막대 그래프, 선 그래프, 파이 차트 등)
-4. **보도자료 자동 생성**: 분석 결과를 보도자료 형식으로 자동 작성
-5. **현대적인 UI/UX**: 반응형 디자인과 직관적인 인터페이스
+1. **주요 통계량 10개 분석**
+   - 전체 평균 물가지수
+   - 최고/최저 물가지수
+   - 최근 1년/3년 평균
+   - 연평균 증가율
+   - 변동성 분석
+   - 지출목적별 상승률 분석
+   - 최근 추세 분석
 
-## 🛠 기술 스택
+2. **보도자료 자동 생성**
+   - Word 문서 형식의 보도자료 자동 생성
+   - 통계량과 종합 분석 포함
 
-### Backend
-- **Flask**: Python 웹 프레임워크
-- **pandas**: 데이터 분석 및 처리
-- **openpyxl**: 엑셀 파일 읽기
-- **NumPy**: 수치 계산
+3. **PDF to DOCX 변환**
+   - PDF 파일을 Word 문서로 변환
+   - pypandoc과 PyPDF2를 사용한 변환 기능
+   - 웹 인터페이스를 통한 간편한 변환
 
-### Frontend
-- **React**: UI 라이브러리
-- **Recharts**: 차트 시각화
-- **Axios**: HTTP 클라이언트
-- **React Dropzone**: 파일 업로드
+## 설치 방법
 
-## 🚀 빠른 시작 (자동 실행)
+1. Python 3.8 이상이 설치되어 있어야 합니다.
 
-### macOS/Linux
+2. Pandoc 설치 (PDF 변환 기능 사용 시 필요):
+   - macOS: `brew install pandoc`
+   - Ubuntu/Debian: `sudo apt-get install pandoc`
+   - Windows: [Pandoc 공식 사이트](https://pandoc.org/installing.html)에서 다운로드
 
+3. 필요한 패키지 설치:
 ```bash
-# 실행 권한 부여 (처음 한 번만)
-chmod +x start.sh stop.sh
-
-# 앱 시작
-./start.sh
-
-# 앱 종료 (다른 터미널에서)
-./stop.sh
+pip install -r requirements.txt
 ```
 
-스크립트가 자동으로:
-1. 필요한 패키지 확인 및 설치
-2. Backend 서버 시작 (포트 5001)
-3. Frontend 서버 시작 (포트 3000)
-4. 브라우저 자동 실행
+## 실행 방법
 
-## 📦 수동 설치 및 실행
-
-### 1. Backend 설정
-
+1. 앱 실행:
 ```bash
-cd backend
-pip install Flask flask-cors pandas openpyxl xlrd numpy
-python3 app.py
+python app.py
 ```
 
-Backend 서버가 `http://localhost:5001`에서 실행됩니다.
-
-### 2. Frontend 설정
-
-새 터미널 창을 열고:
-
-```bash
-cd frontend
-npm install
-npm start
+2. 웹 브라우저에서 접속:
+```
+http://localhost:8889
 ```
 
-Frontend 개발 서버가 `http://localhost:3000`에서 실행됩니다.
+3. 사용 방법:
+   - **통계 분석**: "통계 분석 실행" 버튼을 클릭하여 데이터 분석
+   - **보도자료 생성**: 분석 결과 확인 후 "보도자료 다운로드" 버튼 클릭
+   - **PDF 변환**: "PDF 파일 선택" 버튼으로 PDF 파일 업로드 후 "DOCX로 변환" 버튼 클릭
 
-## 🎯 사용 방법
-
-1. 브라우저에서 `http://localhost:3000` 접속
-2. 엑셀 파일을 드래그 앤 드롭하거나 클릭하여 업로드
-3. 자동으로 분석된 인사이트 5가지와 차트 확인
-4. 보도자료 형식의 상세한 분석 결과 확인
-5. "복사하기" 버튼을 클릭하여 보도자료 복사
-
-## 📊 분석 내용
-
-애플리케이션이 자동으로 추출하는 인사이트:
-
-1. **데이터셋 개요**: 전체 행/열 개수, 컬럼명
-2. **최고 수치 기록**: 최대값과 해당 위치
-3. **주요 통계 지표**: 평균, 표준편차 등
-4. **데이터 추세**: 증가/감소 패턴 분석
-5. **분포 분석**: 카테고리별 또는 수치별 분포
-
-## 📁 프로젝트 구조
+## 프로젝트 구조
 
 ```
 vibe-coding/
-├── start.sh                # 앱 자동 실행 스크립트
-├── stop.sh                 # 앱 종료 스크립트
-├── backend/
-│   ├── app.py              # Flask 애플리케이션
-│   └── requirements.txt    # Python 의존성
-├── frontend/
-│   ├── public/
-│   │   └── index.html
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── FileUpload.js      # 파일 업로드 컴포넌트
-│   │   │   ├── FileUpload.css
-│   │   │   ├── InsightCards.js    # 인사이트 카드 컴포넌트
-│   │   │   ├── InsightCards.css
-│   │   │   ├── PressRelease.js    # 보도자료 컴포넌트
-│   │   │   └── PressRelease.css
-│   │   ├── App.js
-│   │   ├── App.css
-│   │   ├── index.js
-│   │   └── index.css
-│   └── package.json
-└── README.md
+├── app.py                          # Flask 백엔드 애플리케이션
+├── templates/
+│   └── index.html                  # 메인 HTML 템플릿
+├── static/
+│   ├── css/
+│   │   └── style.css              # 스타일시트
+│   └── js/
+│       └── main.js                 # JavaScript 클라이언트 코드
+├── requirements.txt                # Python 의존성
+└── README.md                       # 프로젝트 설명서
 ```
 
-## 🔧 API 엔드포인트
+## 기술 스택
 
-### POST /api/upload
-엑셀 파일을 업로드하고 분석 결과를 반환합니다.
+- **Backend**: Flask (Python)
+- **Frontend**: HTML, CSS, JavaScript
+- **Data Processing**: pandas, numpy
+- **Document Generation**: python-docx
+- **PDF Conversion**: pypandoc, PyPDF2
 
-**Request:**
-- Content-Type: multipart/form-data
-- Body: file (Excel/CSV 파일)
+## 주요 통계량 설명
 
-**Response:**
-```json
-{
-  "success": true,
-  "insights": [...],
-  "press_release": "...",
-  "data_preview": [...]
-}
-```
+1. **전체 평균**: 전체 기간의 평균 소비자물가지수
+2. **최고/최저 물가지수**: 전체 기간 중 최고/최저 값과 해당 시점
+3. **최근 1년 평균**: 최근 1년간의 평균 물가지수
+4. **최근 3년 평균**: 최근 3년간의 평균 물가지수
+5. **연평균 증가율**: 연도별 평균 증가율
+6. **변동성**: 표준편차를 통한 변동성 측정
+7. **최고/최저 상승률 지출목적**: 가장 높은/낮은 상승률을 보인 지출목적
+8. **상위 지출목적 평균**: 평균 물가지수가 가장 높은 지출목적 상위 3개
+9. **최근 추세**: 최근 6개월 대비 이전 6개월의 변화율
 
-### GET /api/health
-서버 상태를 확인합니다.
+## 라이선스
 
-**Response:**
-```json
-{
-  "status": "healthy"
-}
-```
+이 프로젝트는 개인 사용 목적으로 제작되었습니다.
 
-## 💡 예제 데이터
-
-테스트를 위해 다음과 같은 엑셀 파일을 준비하세요:
-
-| 날짜 | 매출액 | 방문자수 | 전환율 |
-|------|--------|----------|--------|
-| 2025-01-01 | 1000000 | 500 | 2.5 |
-| 2025-01-02 | 1200000 | 600 | 3.0 |
-| 2025-01-03 | 950000 | 480 | 2.2 |
-| 2025-01-04 | 1300000 | 650 | 3.2 |
-| 2025-01-05 | 1100000 | 550 | 2.8 |
-
-## 🎨 UI 특징
-
-- **그라데이션 배경**: 보라색 계열의 모던한 디자인
-- **드래그 앤 드롭**: 직관적인 파일 업로드
-- **애니메이션**: 부드러운 페이드 인 효과
-- **반응형 디자인**: 모바일, 태블릿, 데스크톱 지원
-- **인터랙티브 차트**: 마우스 오버 시 상세 정보 표시
-
-## ⚠️ 주의사항
-
-1. Backend 서버가 먼저 실행되어야 Frontend에서 파일을 업로드할 수 있습니다.
-2. 큰 파일(수만 행 이상)의 경우 처리 시간이 길어질 수 있습니다.
-3. macOS에서는 포트 5000이 AirPlay Receiver에 의해 사용되므로 포트 5001을 사용합니다.
-
-## 🐛 문제 해결
-
-### Backend 서버가 시작되지 않는 경우
-
-```bash
-# 패키지 재설치
-cd backend
-pip install --upgrade Flask flask-cors pandas openpyxl xlrd numpy
-
-# 포트 충돌 확인
-lsof -ti:5001
-```
-
-### Frontend가 시작되지 않는 경우
-
-```bash
-# node_modules 재설치
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
-```
-
-### 포트가 이미 사용 중인 경우
-
-```bash
-# Backend 포트 해제
-lsof -ti:5001 | xargs kill -9
-
-# Frontend 포트 해제
-lsof -ti:3000 | xargs kill -9
-```
-
-## 🔮 향후 개선 사항
-
-- [ ] AI 기반 더욱 정교한 인사이트 추출 (GPT API 연동)
-- [ ] 사용자 정의 분석 기준 설정
-- [ ] 다양한 차트 타입 추가
-- [ ] PDF 보고서 다운로드 기능
-- [ ] 여러 파일 비교 분석
-- [ ] 데이터 필터링 및 정렬 기능
-- [ ] 분석 결과 저장 및 이력 관리
-
-## 📝 라이센스
-
-MIT License
-
-## 👨‍💻 개발자
-
-데이터 기반 의사결정을 지원하는 Excel Insights
-
----
-
-**문제가 발생하거나 개선 사항이 있다면 이슈를 등록해주세요!**
