@@ -1,23 +1,12 @@
-from flask import Flask, render_template, jsonify, send_file
+from flask import Flask, render_template, jsonify
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import io
 import os
 from dotenv import load_dotenv
 import requests
-from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-try:
-    import PyPDF2
-    PYPDF2_AVAILABLE = True
-except ImportError:
-    PYPDF2_AVAILABLE = False
 
-# .env 파일 로드
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
 app = Flask(__name__)
 
@@ -119,11 +108,6 @@ def convert_kosis_response_to_dataframe(data):
             rows = data
         
         if not rows:
-            # 디버깅: 응답 구조 출력
-            if isinstance(data, dict):
-                print("API 응답 구조:", list(data.keys()))
-            else:
-                print("API 응답 구조: 리스트 형식")
             raise Exception("API 응답에서 행 데이터를 찾을 수 없습니다.")
         
         # 데이터 변환: PRD_DE와 DT 필드를 사용하여 날짜별로 그룹화
@@ -189,13 +173,8 @@ def convert_kosis_response_to_dataframe(data):
     except Exception as e:
         # API 응답 형식이 예상과 다를 경우, 원본 Excel 파일로 폴백
         error_msg = f"API 응답 변환 실패: {str(e)}"
-        print(error_msg)
-        print("로컬 Excel 파일로 폴백합니다...")
-        
-        # 로컬 파일이 있으면 사용
         file_path = '지출목적별_소비자물가지수_품목포함__2020100__20251106131304.xlsx'
         if os.path.exists(file_path):
-            print(f"로컬 파일 사용: {file_path}")
             return pd.read_excel(file_path, sheet_name='데이터')
         else:
             raise Exception(f"{error_msg} (로컬 파일도 없음)")
@@ -382,252 +361,6 @@ def calculate_statistics(df):
             }
     
     return stats
-
-def generate_press_release(stats):
-    """PDF 형식에 맞춘 보도자료 생성"""
-    doc = Document()
-    
-    # 페이지 설정
-    section = doc.sections[0]
-    section.page_height = Inches(11.69)  # A4
-    section.page_width = Inches(8.27)
-    
-    # 헤더: 소비자물가조사 보도자료
-    header_para = doc.add_paragraph('소비자물가조사')
-    header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    header_run = header_para.runs[0]
-    header_run.font.size = Pt(14)
-    header_run.font.bold = True
-    
-    header_para2 = doc.add_paragraph('보도자료')
-    header_para2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    header_run2 = header_para2.runs[0]
-    header_run2.font.size = Pt(14)
-    header_run2.font.bold = True
-    
-    # 보도시점
-    now = datetime.now()
-    weekday_kr = ['월', '화', '수', '목', '금', '토', '일'][now.weekday()]
-    press_time = f'보도시점 {now.strftime("%Y. %m. %d")}.({weekday_kr}) 08:00'
-    release_time = f'배포{now.strftime("%Y. %m. %d")}.({weekday_kr}) 07:30'
-    
-    time_para = doc.add_paragraph(f'{press_time} {release_time}')
-    time_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    time_run = time_para.runs[0]
-    time_run.font.size = Pt(10)
-    
-    # 제목: 2025년 10월 소비자물가동향
-    title_para = doc.add_paragraph(f'{now.strftime("%Y년 %m월")} 소비자물가동향')
-    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run = title_para.runs[0]
-    title_run.font.size = Pt(16)
-    title_run.font.bold = True
-    
-    # 담당 부서 정보
-    dept_para = doc.add_paragraph('담당 부서 경제동향통계심의관 책임자 과  장 박병선(042-481-2530)')
-    dept_run = dept_para.runs[0]
-    dept_run.font.size = Pt(10)
-    
-    dept_para2 = doc.add_paragraph('물가동향과 담당자 사무관 이정화(042-481-2531)')
-    dept_run2 = dept_para2.runs[0]
-    dept_run2.font.size = Pt(10)
-    
-    doc.add_page_break()
-    
-    # 일러두기
-    doc.add_heading('일 러 두 기', 1)
-    
-    notice_items = [
-        ('□', '현재 소비자물가지수의 기준연도는 2020년, 가중치의 기준연도는 2022년입니다.'),
-        ('○', '따라서 품목별 지수와 가중치를 이용하여 상위 단계 지수 계산한 결과와 공표하는 지수는 일치하지 않음에 유의하여 주시기 바랍니다.'),
-        ('', '* 상세내용은 부록 소비자물가지수 계산식 참조'),
-        ('□', '매월 발표하는 소비자물가지수는 가격변동을 측정하는 것으로 가격의 절대수준을 나타내지 않습니다.'),
-        ('○', '따라서 지역별로 기준시점(2020년=100)의 가격수준이 다르기 때문에 지역별 소비자물가지수를 이용하여 지역간 상대적인 물가수준 차이를 비교하는 것은 부적절합니다.'),
-        ('□', '일반적으로 소비자물가변동 추이 및 국가 간 비교는 1년 전 대비 물가 변동인 전년동월비를 주로 이용하지만, 단기간의 변동인 전월비도 참고하시기 바랍니다.'),
-        ('□', '소비자물가지수는 2019년 이전은 소수점 이하 3자리, 2020년 이후는 소수점 이하 2자리로 작성되고 있습니다.'),
-        ('○', '통계표에 사용된 "-" 부호의 뜻은 "해당 숫자 없음"을 의미합니다.'),
-        ('□', '본문에 수록된 자료는 국가데이터처 홈페이지(http://kostat.go.kr) 및 국가통계포털(http://kosis.kr)을 통해 이용할 수 있습니다.'),
-        ('○', '또한 소비자물가지수에 대한 일반적인 설명은 『소비자물가지수 이해 홈페이지』* 를 통해 제공하고 있습니다.'),
-        ('', '* https://kostat.go.kr/opi 또는 국가데이터처 홈페이지>통계조사>통계이해>소비자물가지수'),
-    ]
-    
-    for prefix, text in notice_items:
-        para = doc.add_paragraph()
-        if prefix:
-            run = para.add_run(prefix + ' ')
-            run.font.size = Pt(10)
-        run = para.add_run(text)
-        run.font.size = Pt(10)
-    
-    doc.add_page_break()
-    
-    # 목차
-    doc.add_heading('목 차', 1)
-    
-    toc_items = [
-        ('❐', f'{now.strftime("%Y년 %m월")} 소비자물가동향 (요약)', '1'),
-        ('❐', f'{now.strftime("%Y년 %m월")} 소비자물가동향', '2'),
-        ('', '1. 소비자물가지수 동향', '2'),
-        ('', '2. 소비자물가지수 부문별 동향', '4'),
-        ('', '3. 소비자물가지수 지역별 동향', '8'),
-        ('❐', '통계표', '10'),
-        ('', '4. 지출목적별 소비자물가지수 동향', '10'),
-        ('', '5. 소비자물가지수 추이', '11'),
-        ('', '6. 주요 국가 소비자물가지수 동향', '16'),
-        ('◇', '부 록', ''),
-        ('◎', '소비자물가지수의 개요', '18'),
-        ('◎', '자주하는 질문', '20'),
-        ('◎', f'{now.year}년 소비자물가동향 공표일정', '22'),
-    ]
-    
-    for prefix, text, page in toc_items:
-        para = doc.add_paragraph()
-        if prefix:
-            run = para.add_run(prefix + ' ')
-            run.font.size = Pt(10)
-        run = para.add_run(text)
-        run.font.size = Pt(10)
-        if page:
-            run = para.add_run(' ' + '.' * (50 - len(text)) + page)
-            run.font.size = Pt(10)
-    
-    doc.add_page_break()
-    
-    # 본문 시작
-    # 1. 소비자물가지수 동향
-    doc.add_heading('1. 소비자물가지수 동향', 1)
-    
-    # 주요 등락률 추이 표
-    doc.add_paragraph('소비자물가지수 주요 등락률 추이')
-    
-    table = doc.add_table(rows=8, cols=7)
-    table.style = 'Light Grid Accent 1'
-    
-    # 헤더 행 (첫 번째 행)
-    header_cells = table.rows[0].cells
-    header_texts = ['', '연도별 통향(전년비)', '', '', '최근 월별 통향(전년동월비)', '', '']
-    for i, text in enumerate(header_texts):
-        if i < len(header_cells):
-            header_cells[i].text = text
-            if header_cells[i].paragraphs[0].runs:
-                header_cells[i].paragraphs[0].runs[0].font.bold = True
-                header_cells[i].paragraphs[0].runs[0].font.size = Pt(9)
-    
-    # 두 번째 헤더 행
-    if len(table.rows) > 1:
-        header2_cells = table.rows[1].cells
-        header2_texts = ['', '2022', '2023', '2024', f'{now.strftime("%Y.%m")}월', f'{now.strftime("%Y.%m")}월', f'{now.strftime("%Y.%m")}월']
-        for i, text in enumerate(header2_texts):
-            if i < len(header2_cells):
-                header2_cells[i].text = text
-                if header2_cells[i].paragraphs[0].runs:
-                    header2_cells[i].paragraphs[0].runs[0].font.bold = True
-                    header2_cells[i].paragraphs[0].runs[0].font.size = Pt(9)
-    
-    # 데이터 행
-    data_rows = [
-        ['소비자물가지수', '5.1', '3.6', '2.3', 
-         f'{stats.get("연평균_증가율", {}).get("value", 0):.1f}' if stats.get("연평균_증가율") else '2.1',
-         f'{stats.get("최근_1년_평균", {}).get("value", 0):.1f}' if stats.get("최근_1년_평균") else '1.7',
-         f'{stats.get("최근_추세", {}).get("value", 0):.1f}' if stats.get("최근_추세") else '2.1'],
-        ['식료품 및 에너지 제외지수', '3.6', '3.4', '2.2', '2.0', '1.3', '2.0'],
-        ['농산물 및 석유류 제외지수', '4.1', '4.0', '2.1', '2.3', '1.9', '2.4'],
-        ['생활물가지수', '6.0', '3.9', '2.7', '2.5', '1.5', '2.5'],
-        ['신선식품지수', '5.4', '6.8', '9.8', '-0.5', '2.1', '-2.5'],
-        ['농축수산물', '3.8', '3.1', '5.9', '2.1', '4.8', '1.9'],
-    ]
-    
-    for row_idx, row_data in enumerate(data_rows, start=2):
-        if row_idx < len(table.rows):
-            cells = table.rows[row_idx].cells
-            for col_idx, text in enumerate(row_data):
-                if col_idx < len(cells):
-                    cells[col_idx].text = str(text)
-                    if cells[col_idx].paragraphs[0].runs:
-                        cells[col_idx].paragraphs[0].runs[0].font.size = Pt(9)
-    
-    doc.add_paragraph()
-    
-    # 주요 통계량 요약
-    doc.add_paragraph('주요 통계량 요약')
-    
-    summary_items = [
-        ('전체 평균 소비자물가지수', stats.get('전체_평균', {}).get('value', 'N/A')),
-        ('최고 물가지수', f"{stats.get('최고_물가지수', {}).get('value', 'N/A')} ({stats.get('최고_물가지수', {}).get('date', 'N/A')})"),
-        ('최저 물가지수', f"{stats.get('최저_물가지수', {}).get('value', 'N/A')} ({stats.get('최저_물가지수', {}).get('date', 'N/A')})"),
-        ('최근 1년 평균', stats.get('최근_1년_평균', {}).get('value', 'N/A')),
-        ('최근 3년 평균', stats.get('최근_3년_평균', {}).get('value', 'N/A')),
-        ('연평균 증가율', f"{stats.get('연평균_증가율', {}).get('value', 'N/A')}%"),
-        ('변동성 (표준편차)', stats.get('변동성', {}).get('value', 'N/A')),
-    ]
-    
-    for label, value in summary_items:
-        para = doc.add_paragraph()
-        run = para.add_run(f'• {label}: ')
-        run.font.bold = True
-        run.font.size = Pt(10)
-        para.add_run(str(value)).font.size = Pt(10)
-    
-    doc.add_page_break()
-    
-    # 2. 지출목적별 소비자물가지수 동향
-    doc.add_heading('2. 지출목적별 소비자물가지수 동향', 1)
-    
-    if '최고_상승률_지출목적' in stats:
-        para = doc.add_paragraph()
-        run = para.add_run('최고 상승률 지출목적: ')
-        run.font.bold = True
-        run.font.size = Pt(10)
-        stat = stats['최고_상승률_지출목적']
-        para.add_run(f"{stat.get('category', 'N/A')} ({stat.get('value', 'N/A')}%)").font.size = Pt(10)
-    
-    if '최저_상승률_지출목적' in stats:
-        para = doc.add_paragraph()
-        run = para.add_run('최저 상승률 지출목적: ')
-        run.font.bold = True
-        run.font.size = Pt(10)
-        stat = stats['최저_상승률_지출목적']
-        para.add_run(f"{stat.get('category', 'N/A')} ({stat.get('value', 'N/A')}%)").font.size = Pt(10)
-    
-    if '상위_지출목적_평균' in stats:
-        para = doc.add_paragraph()
-        run = para.add_run('상위 지출목적 평균 물가지수: ')
-        run.font.bold = True
-        run.font.size = Pt(10)
-        para.add_run('\n').font.size = Pt(10)
-        
-        for cat in stats['상위_지출목적_평균'].get('categories', []):
-            para2 = doc.add_paragraph()
-            run2 = para2.add_run(f"  • {cat['name']}: ")
-            run2.font.bold = True
-            run2.font.size = Pt(10)
-            para2.add_run(f"{cat['value']}").font.size = Pt(10)
-    
-    doc.add_page_break()
-    
-    # 3. 종합 분석
-    doc.add_heading('3. 종합 분석', 1)
-    
-    analysis_text = f"""
-전체 기간 평균 소비자물가지수는 {stats.get('전체_평균', {}).get('value', 'N/A')}로 나타났으며, 
-최근 1년 평균은 {stats.get('최근_1년_평균', {}).get('value', 'N/A')}입니다.
-
-연평균 증가율은 {stats.get('연평균_증가율', {}).get('value', 'N/A')}%로, 
-물가가 지속적으로 상승하는 추세를 보이고 있습니다.
-
-최근 6개월 추세는 {stats.get('최근_추세', {}).get('trend', 'N/A')} 추세로, 
-이전 6개월 대비 {abs(stats.get('최근_추세', {}).get('value', 0)):.2f}% 변화를 보였습니다.
-    """
-    
-    para = doc.add_paragraph(analysis_text.strip())
-    for run in para.runs:
-        run.font.size = Pt(10)
-    
-    # 바이트 스트림으로 반환
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
 
 @app.route('/')
 def index():
