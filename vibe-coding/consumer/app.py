@@ -1,4 +1,5 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, send_file
+import io
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -10,8 +11,15 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'))
 
 app = Flask(__name__)
 
-def load_data():
-    """KOSIS API에서 데이터 로드"""
+def load_data(period_type=None, month_count=None, start_date=None, end_date=None):
+    """KOSIS API에서 데이터 로드
+    
+    Args:
+        period_type: 'months' 또는 'range'
+        month_count: 최근 N개월 (period_type이 'months'일 때)
+        start_date: 시작일 (YYYYMM 형식, period_type이 'range'일 때)
+        end_date: 종료일 (YYYYMM 형식, period_type이 'range'일 때)
+    """
     api_key = os.getenv('KOSIS_API_KEY')
     
     if not api_key:
@@ -39,10 +47,21 @@ def load_data():
         'format': 'json',
         'jsonVD': 'Y',
         'prdSe': 'M',
-        'newEstPrdCnt': '3',
         'orgId': '101',
         'tblId': 'DT_1J22001'
     }
+    
+    # 기간 설정
+    if period_type == 'months' and month_count:
+        # 최근 N개월
+        params['newEstPrdCnt'] = str(month_count)
+    elif period_type == 'range' and start_date and end_date:
+        # 시작일/종료일 지정
+        params['startPrdDe'] = start_date  # YYYYMM 형식
+        params['endPrdDe'] = end_date  # YYYYMM 형식
+    else:
+        # 기본값: 최근 36개월
+        params['newEstPrdCnt'] = '36'
     
     try:
         # API 호출
@@ -369,7 +388,25 @@ def index():
 @app.route('/api/statistics')
 def get_statistics():
     try:
-        df = load_data()
+        # 요청 파라미터에서 기간 정보 가져오기
+        period_type = request.args.get('periodType', 'months')
+        month_count = request.args.get('monthCount', type=int)
+        start_date = request.args.get('startDate')  # YYYY-MM 형식
+        end_date = request.args.get('endDate')  # YYYY-MM 형식
+        
+        # 날짜 형식 변환 (YYYY-MM -> YYYYMM)
+        start_prd_de = None
+        end_prd_de = None
+        if start_date and end_date:
+            start_prd_de = start_date.replace('-', '')
+            end_prd_de = end_date.replace('-', '')
+        
+        df = load_data(
+            period_type=period_type,
+            month_count=month_count,
+            start_date=start_prd_de,
+            end_date=end_prd_de
+        )
         stats = calculate_statistics(df)
         return jsonify({'success': True, 'statistics': stats})
     except Exception as e:
@@ -552,10 +589,77 @@ def generate_press_release_html(stats):
 def get_press_release():
     """보도자료를 HTML 형식으로 반환"""
     try:
-        df = load_data()
+        # 요청 파라미터에서 기간 정보 가져오기
+        period_type = request.args.get('periodType', 'months')
+        month_count = request.args.get('monthCount', type=int)
+        start_date = request.args.get('startDate')
+        end_date = request.args.get('endDate')
+        
+        # 날짜 형식 변환
+        start_prd_de = None
+        end_prd_de = None
+        if start_date and end_date:
+            start_prd_de = start_date.replace('-', '')
+            end_prd_de = end_date.replace('-', '')
+        
+        df = load_data(
+            period_type=period_type,
+            month_count=month_count,
+            start_date=start_prd_de,
+            end_date=end_prd_de
+        )
         stats = calculate_statistics(df)
         html_content = generate_press_release_html(stats)
         return jsonify({'success': True, 'html': html_content})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/download-data')
+def download_data():
+    """원본 데이터를 Excel 파일로 다운로드"""
+    try:
+        # 요청 파라미터에서 기간 정보 가져오기
+        period_type = request.args.get('periodType', 'months')
+        month_count = request.args.get('monthCount', type=int)
+        start_date = request.args.get('startDate')
+        end_date = request.args.get('endDate')
+        
+        # 날짜 형식 변환
+        start_prd_de = None
+        end_prd_de = None
+        if start_date and end_date:
+            start_prd_de = start_date.replace('-', '')
+            end_prd_de = end_date.replace('-', '')
+        
+        # 데이터 로드
+        df = load_data(
+            period_type=period_type,
+            month_count=month_count,
+            start_date=start_prd_de,
+            end_date=end_prd_de
+        )
+        
+        # Excel 파일로 변환
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='데이터')
+        
+        output.seek(0)
+        
+        # 파일명 생성
+        now = datetime.now()
+        filename = f'소비자물가지수_{now.strftime("%Y%m%d")}'
+        if period_type == 'months':
+            filename += f'_최근{month_count}개월.xlsx'
+        else:
+            filename += f'_{start_date}_{end_date}.xlsx'
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

@@ -13,8 +13,29 @@
             <p class="subtitle">주요 통계량 10개 분석 및 보도자료 생성</p>
         </header>
 
+        <div class="period-selection">
+            <label for="periodType">기간 선택 방식:</label>
+            <select id="periodType" class="period-select">
+                <option value="months">최근 N개월</option>
+                <option value="range">시작일 ~ 종료일</option>
+            </select>
+            
+            <div id="monthsInput" class="period-input">
+                <label for="monthCount">개월 수:</label>
+                <input type="number" id="monthCount" min="1" max="120" value="36" class="period-input-field">
+            </div>
+            
+            <div id="dateRangeInput" class="period-input hidden">
+                <label for="startDate">시작일:</label>
+                <input type="month" id="startDate" class="period-input-field">
+                <label for="endDate">종료일:</label>
+                <input type="month" id="endDate" class="period-input-field">
+            </div>
+        </div>
+
         <div class="controls">
-            <button id="analyzeBtn" class="btn btn-primary">통계 분석 실행</button>
+            <button id="analyzeBtn" class="btn btn-primary">바로 실행</button>
+            <button id="dataDownloadBtn" class="btn btn-info">자료 다운로드</button>
             <button id="downloadBtn" class="btn btn-secondary" disabled>보도자료 보기</button>
         </div>
 
